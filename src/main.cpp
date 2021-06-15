@@ -397,6 +397,8 @@ void setup()
 }
 
 uint8_t text_debug = 0;
+uint8_t thermalOn = 0;
+uint8_t rgbOn = 0;
 
 void loop() 
 {
@@ -448,6 +450,19 @@ void loop()
     serial_channels.StateMachine(b);
   } 
 
+  pcf_in_data = PCF_IN.read8();
+
+  if (pcf_in_data & 0b00000001) {
+    flagStop = 1;
+    fsm.set_state(ps_stop);
+  } 
+  if (pcf_in_data & 0b00000010) {
+    flagStop = 0;
+  } 
+  if (pcf_in_data & 0b00000011) {
+    Serial2.write("5");
+  } 
+
   if (Serial2.available()) {
     Serial.print("Message: ");
     int msg = Serial2.read();
@@ -464,6 +479,12 @@ void loop()
     else if (msg == 51) {
       flagStop = 0;
     } 
+    if (msg == 52) {
+      thermalOn = 1;
+    }
+    if (msg == 53) {
+      rgbOn = 1;
+    }
   }
 
   if (sendStateflag) {
@@ -504,9 +525,9 @@ void loop()
 
     digitalWrite(led_pin, led_state);
 
-    pcf_in_data = PCF_IN.read8();
-    pcf_out_data = pcf_in_data;
-    PCF_OUT.write8(pcf_out_data);
+    //pcf_in_data = PCF_IN.read8();
+    //pcf_out_data = pcf_in_data;
+    //PCF_OUT.write8(pcf_out_data);
     
     if (text_debug) {
       Serial.print("S: ");
@@ -530,7 +551,7 @@ void loop()
 
       Serial.print(" ");
     }
-    
+
     Serial.printf("%s, Port %d ", WiFi.localIP().toString().c_str(), localUdpPort);
 
     // Send motor state
@@ -581,6 +602,32 @@ void loop()
         staging_buffer.empty();
        }    
     }
+  }
+
+  if (thermalOn) {
+    pcf_out_data = 0b00000001;
+  }
+  else if (rgbOn) {
+    pcf_out_data = 0b00000010;
+  }
+  else if (pir_person) {
+    pcf_out_data = 0b00000100;    
+  }
+  else if (rgbOn && thermalOn) {
+    pcf_out_data = 0b00000011;    
+  }
+  else if (rgbOn && pir_person) {
+    pcf_out_data = 0b00000110;    
+  }
+  else if (thermalOn && pir_person) {
+    pcf_out_data = 0b00000101;    
+  }
+  else if (thermalOn && pir_person && rgbOn) {
+    pcf_out_data = 0b00000111;    
+  }
+
+  if (rgbOn || pir_person || thermalOn) {
+    PCF_OUT.write8(pcf_out_data);
   }
 }
 
