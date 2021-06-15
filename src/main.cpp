@@ -607,27 +607,29 @@ void loop()
   if (thermalOn) {
     pcf_out_data = 0b00000001;
   }
-  else if (rgbOn) {
+  if (rgbOn) {
     pcf_out_data = 0b00000010;
   }
-  else if (pir_person) {
+  if (pir_person) {
     pcf_out_data = 0b00000100;    
   }
-  else if (rgbOn && thermalOn) {
+  if (rgbOn && thermalOn) {
     pcf_out_data = 0b00000011;    
   }
-  else if (rgbOn && pir_person) {
+  if (rgbOn && pir_person) {
     pcf_out_data = 0b00000110;    
   }
-  else if (thermalOn && pir_person) {
+  if (thermalOn && pir_person) {
     pcf_out_data = 0b00000101;    
   }
-  else if (thermalOn && pir_person && rgbOn) {
+  if (thermalOn && pir_person && rgbOn) {
     pcf_out_data = 0b00000111;    
   }
 
   if (rgbOn || pir_person || thermalOn) {
     PCF_OUT.write8(pcf_out_data);
+    rgbOn = 0;
+    thermalOn = 0;
   }
 }
 
