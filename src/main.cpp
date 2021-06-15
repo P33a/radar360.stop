@@ -11,6 +11,16 @@
 
 #include <ArduinoOTA.h>
 
+#include "PCF8574.h"
+#include <Wire.h>
+
+// adjust addresses if needed
+PCF8574 PCF_IN(0x24);  // add switches to lines  (used as input)
+
+PCF8574 PCF_OUT(0x20);  // add leds to lines      (used as output)
+
+uint8_t pcf_out_data, pcf_in_data;
+
 WebServer Server;
 AutoConnect Portal(Server);
 AutoConnectConfig config;
@@ -338,6 +348,9 @@ void setup()
   pinMode(person_pin, OUTPUT);      
   digitalWrite(person_pin, 0);  
 
+  PCF_IN.begin();
+  PCF_OUT.begin();
+
   NVS.begin();
   if (!read_pars_from_eeprom()) {
     fill_sane_pars();
@@ -491,6 +504,9 @@ void loop()
 
     digitalWrite(led_pin, led_state);
 
+    pcf_in_data = PCF_IN.read8();
+    pcf_out_data = pcf_in_data;
+    PCF_OUT.write8(pcf_out_data);
     
     if (text_debug) {
       Serial.print("S: ");
