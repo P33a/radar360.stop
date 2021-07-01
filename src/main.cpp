@@ -19,7 +19,7 @@ PCF8574 PCF_IN(0x24);  // add switches to lines  (used as input)
 
 PCF8574 PCF_OUT(0x20);  // add leds to lines      (used as output)
 
-uint8_t pcf_out_data, pcf_in_data;
+uint8_t pcf_out_data = 0b00000000, pcf_in_data;
 
 WebServer Server;
 AutoConnect Portal(Server);
@@ -74,6 +74,7 @@ char  replyPacekt[] = "Hi there! Got the message :-)";  // a reply string to sen
 
 #define sweep_speed Pars[0]
 #define step_steps Pars[1]
+#define DETECT_THRESH 40
 
   
 int PIR[4];
@@ -399,6 +400,7 @@ void setup()
 uint8_t text_debug = 0;
 uint8_t thermalOn = 0;
 uint8_t rgbOn = 0;
+uint8_t histOn = 0;
 
 void loop() 
 {
@@ -450,19 +452,6 @@ void loop()
     serial_channels.StateMachine(b);
   } 
 
-  pcf_in_data = PCF_IN.read8();
-
-  if (pcf_in_data & 0b00000001) {
-    flagStop = 1;
-    fsm.set_state(ps_stop);
-  } 
-  if (pcf_in_data & 0b00000010) {
-    flagStop = 0;
-  } 
-  if (pcf_in_data & 0b00000011) {
-    Serial2.write("5");
-  } 
-
   if (Serial2.available()) {
     Serial.print("Message: ");
     int msg = Serial2.read();
@@ -480,11 +469,34 @@ void loop()
       flagStop = 0;
     } 
     if (msg == 52) {
-      thermalOn = 1;
+      rgbOn = 1;
+      thermalOn = 0;
     }
     if (msg == 53) {
       rgbOn = 1;
+      thermalOn = 0;
     }
+    if (msg == 54) {
+      rgbOn = 1;
+      thermalOn = 1;
+    }
+    if (msg == 55) {
+      rgbOn = 0;
+      thermalOn = 0;
+    }
+  }
+
+  if (thermalOn) {
+    pcf_out_data &= 0b11111110;
+  }
+  if (rgbOn) {
+    pcf_out_data &= 0b11111101;
+  }
+  if (pir_person) {
+    pcf_out_data &= 0b11111011;    
+  }
+  if ((thermalOn*0.4 + rgbOn*0.4 + pir_person*0.10 + histOn*0.10)*100 >= DETECT_THRESH) {
+    pcf_out_data &= 0b11110111;
   }
 
   if (sendStateflag) {
@@ -492,12 +504,6 @@ void loop()
     sendStateflag = false;
     Serial.println(fsm.state);
   }
-
-  /*if (millis() - last > 1000) {
-    Serial2.write("2");
-    last += 1000;
-    Serial.println("Check");
-  }*/
 
   // Read end switch
   end_switch = !digitalRead(end_pin);
@@ -508,15 +514,24 @@ void loop()
   
   act_micros = micros();
   delta = act_micros - last_micros;
+  
   if (delta >= interval_us) {
     last_micros = act_micros;  
     //Serial.print(step);
+
+    pcf_in_data = PCF_IN.read8();
+    PCF_OUT.write8(pcf_out_data);
+    pcf_out_data = 0xFF;
 
     // Read PIRs
     PIR[0] = digitalRead(PIR0_pin);
     PIR[1] = digitalRead(PIR1_pin);
     PIR[2] = digitalRead(PIR2_pin);
     PIR[3] = digitalRead(PIR3_pin);
+   /* Serial.print(PIR0_pin);
+    Serial.print(PIR1_pin);
+    Serial.print(PIR2_pin);
+    Serial.println(PIR3_pin);*/
     pir_person = PIR[0] | PIR[1] | PIR[2] | PIR[3];
     digitalWrite(person_pin, pir_person);  
 
@@ -604,33 +619,17 @@ void loop()
     }
   }
 
-  if (thermalOn) {
-    pcf_out_data = 0b00000001;
-  }
-  if (rgbOn) {
-    pcf_out_data = 0b00000010;
-  }
-  if (pir_person) {
-    pcf_out_data = 0b00000100;    
-  }
-  if (rgbOn && thermalOn) {
-    pcf_out_data = 0b00000011;    
-  }
-  if (rgbOn && pir_person) {
-    pcf_out_data = 0b00000110;    
-  }
-  if (thermalOn && pir_person) {
-    pcf_out_data = 0b00000101;    
-  }
-  if (thermalOn && pir_person && rgbOn) {
-    pcf_out_data = 0b00000111;    
-  }
+  if ((pcf_in_data ^ 0b11111110) == 0b10) {
+    flagStop = 1;
+    fsm.set_state(ps_stop);
+  } 
+  if ((pcf_in_data ^ 0b11111110) == 0b100) {
+    flagStop = 0;
+  } 
+  if ((pcf_in_data ^ 0b11111110) == 0b1000) {
+    Serial2.println("5");
+  } 
 
-  if (rgbOn || pir_person || thermalOn) {
-    PCF_OUT.write8(pcf_out_data);
-    rgbOn = 0;
-    thermalOn = 0;
-  }
 }
 
 
