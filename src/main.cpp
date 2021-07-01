@@ -19,7 +19,7 @@ PCF8574 PCF_IN(0x24);  // add switches to lines  (used as input)
 
 PCF8574 PCF_OUT(0x20);  // add leds to lines      (used as output)
 
-uint8_t pcf_out_data = 0b00000000, pcf_in_data;
+uint8_t pcf_out_data, pcf_in_data;
 
 WebServer Server;
 AutoConnect Portal(Server);
