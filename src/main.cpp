@@ -41,7 +41,7 @@ const int heartbeat_pin = led_pin; // D9
 const int person_pin = 25; // D2
 
 const int PIR0_pin = 34; // A2
-const int PIR1_pin = 35; // A3
+const int PIR1_pin = 17; // A3
 const int PIR2_pin = 15; // A4
 const int PIR3_pin = 39; // A1
 
@@ -155,8 +155,8 @@ void set_motor_speed(float tps)
   digitalWrite(enable_pin, !motor.enable);  
 }
 
-int flag = 0;
-int flagStop = 0;
+//int flag = 0;
+//int flagStop = 0;
 
 void fsm_t::progress(void)
 {
@@ -176,21 +176,23 @@ void fsm_t::progress(void)
 
   } else if (state == ps_sweep && motor.steps > 640*4.7) {
     set_state(ps_stop);
+    Serial2.write('S');
 
   //} else if (state == ps_stop && tis > 800) {
-  } else if (state == ps_stop && (flag == 1 || tis > 2000) && (!flagStop)) {
-    flag = 0;
+  //} else if (state == ps_stop && (flag == 1 || tis > 2000) && (!flagStop)) {
+  } else if (state == ps_stop && req_rotate && !req_stop) {
+    req_rotate = 0;
     motor.steps -= 640*4.7; 
     set_state(ps_sweep);
   
-  } else if (state == ps_stop && flagStop) { 
-    set_state(ps_stop);
+  //} else if (state == ps_stop && flagStop) { 
+  //  set_state(ps_stop);
 
   } 
 
 }
 
-bool sendStateflag = false;
+//bool sendStateflag = false;
 
 void fsm_t::set_state(fsm_state_t new_state)
 {
@@ -210,7 +212,7 @@ void fsm_t::set_state(fsm_state_t new_state)
 
     } else if (new_state == ps_stop) {
       set_motor_speed(0);
-      sendStateflag = true;
+      //sendStateflag = true;
 
     } else if (new_state == ps_idle) {
       set_motor_speed(0);
@@ -397,10 +399,9 @@ void setup()
   }  
 }
 
-uint8_t text_debug = 0;
-uint8_t thermalOn = 0;
-uint8_t rgbOn = 0;
-uint8_t histOn = 0;
+uint8_t text_debug = 1;
+uint8_t thermal_persons = 0;
+uint8_t rgb_persons = 0;
 
 void loop() 
 {
@@ -453,60 +454,34 @@ void loop()
   } 
 
   if (Serial2.available()) {
-    Serial.print("Message: ");
-    int msg = Serial2.read();
-    char msgS = msg;
-    Serial.println(msgS);
-    if (msg == 49) {
-      //fsm.set_state(ps_sweep);
-      flag = 1;
+    Serial.print("M: ");
+    byte msg = Serial2.read();
+    Serial.write(msg);
+
+    if (msg == 'R') {
+      fsm.req_rotate = 1;
+    } else if (msg == 'G') {
+      rgb_persons = 1;
+    } else if (msg == 'g') {
+      rgb_persons = 0;
+    } else if (msg == 'T') {
+      thermal_persons = 1;
+    } else if (msg == 't') {
+      thermal_persons = 0;
     } 
-    if (msg == 50) {
-      flagStop = 1;
-      fsm.set_state(ps_stop);
-    } 
-    else if (msg == 51) {
-      flagStop = 0;
-    } 
-    if (msg == 52) {
-      rgbOn = 1;
-      thermalOn = 0;
-    }
-    if (msg == 53) {
-      rgbOn = 1;
-      thermalOn = 0;
-    }
-    if (msg == 54) {
-      rgbOn = 1;
-      thermalOn = 1;
-    }
-    if (msg == 55) {
-      rgbOn = 0;
-      thermalOn = 0;
-    }
   }
 
-  if (thermalOn) {
-    pcf_out_data &= 0b11111110;
-  }
-  if (rgbOn) {
-    pcf_out_data &= 0b11111101;
-  }
-  if (pir_person) {
-    pcf_out_data &= 0b11111011;    
-  }
-  if ((thermalOn*0.4 + rgbOn*0.4 + pir_person*0.10 + histOn*0.10)*100 >= DETECT_THRESH) {
-    pcf_out_data &= 0b11110111;
-  }
-
+/*
   if (sendStateflag) {
     Serial2.write("2");
     sendStateflag = false;
     Serial.println(fsm.state);
-  }
+  }*/
 
   // Read end switch
   end_switch = !digitalRead(end_pin);
+
+
 
   // Do the state machine
   fsm.progress();
@@ -520,8 +495,6 @@ void loop()
     //Serial.print(step);
 
     pcf_in_data = PCF_IN.read8();
-    PCF_OUT.write8(pcf_out_data);
-    pcf_out_data = 0xFF;
 
     // Read PIRs
     PIR[0] = digitalRead(PIR0_pin);
@@ -543,13 +516,39 @@ void loop()
     //pcf_in_data = PCF_IN.read8();
     //pcf_out_data = pcf_in_data;
     //PCF_OUT.write8(pcf_out_data);
-    
+
+    pcf_out_data = 0;
+
+    if (thermal_persons) {
+      pcf_out_data |= (1 << 0);
+    }
+    if (rgb_persons) {
+      pcf_out_data |= (1 << 1);
+    }
+    if (pir_person) {
+      pcf_out_data |= (1 << 2);  
+    }
+    if (thermal_persons || rgb_persons || pir_person) {
+      pcf_out_data |= (1 << 3);
+    }
+    PCF_OUT.write8(pcf_out_data);
+
+    if (!(pcf_in_data & (1 << 3))) {
+      fsm.req_stop = 1;
+    } else {
+      fsm.req_stop = 0;
+    }
+
+    if (!(pcf_in_data & (1 << 2))) {
+      Serial2.println("D");
+    }
+      
     if (text_debug) {
       Serial.print("S: ");
       Serial.print(fsm.state);
 
-      Serial.print(" E: ");
-      Serial.print(end_switch);
+      //Serial.print(" E: ");
+      //Serial.print(end_switch);
 
       Serial.print(" P[");
       Serial.print(PIR[0]);
@@ -558,13 +557,21 @@ void loop()
       Serial.print(PIR[3]);
       Serial.print("] ");
 
-      Serial.print(" Steps: ");
-      Serial.print(motor.steps);
+      Serial.print(" T: ");
+      Serial.print(thermal_persons);
+      Serial.print(" RGB: ");
+      Serial.print(rgb_persons);
 
-      Serial.print(" LED: ");
-      Serial.print(led_state);
+      Serial.print(" Pir: ");
+      Serial.print(pir_person);
 
-      Serial.print(" ");
+      Serial.print(" IN: ");
+      Serial.print(pcf_in_data, BIN);
+
+      //Serial.print(" LED: ");
+      //Serial.print(led_state);
+
+      Serial.print("; ");
     }
 
     Serial.printf("%s, Port %d ", WiFi.localIP().toString().c_str(), localUdpPort);
@@ -619,16 +626,6 @@ void loop()
     }
   }
 
-  if ((pcf_in_data ^ 0b11111110) == 0b10) {
-    flagStop = 1;
-    fsm.set_state(ps_stop);
-  } 
-  if ((pcf_in_data ^ 0b11111110) == 0b100) {
-    flagStop = 0;
-  } 
-  if ((pcf_in_data ^ 0b11111110) == 0b1000) {
-    Serial2.println("5");
-  } 
 
 }
 

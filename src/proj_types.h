@@ -28,6 +28,7 @@ class fsm_t{
   public:
   uint32_t tes, tis;
   fsm_state_t state, prev_state;
+  byte req_rotate, req_stop;
   
   void set_state(fsm_state_t new_state);
   void act(void);
